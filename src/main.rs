@@ -25,7 +25,7 @@ async fn main() {
     // 15 causes very little blocking behavior (in the steady state)
     // 125 causes some blocking behavior and some non-blocking
     // 135: essentially all requests incur blocking
-    const N_CLIENTS: usize = 125;
+    const N_CLIENTS: usize = 1000;
 
     // Make the prescribed number of clients.
     let clients = (0..N_CLIENTS)

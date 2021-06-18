@@ -46,7 +46,7 @@ impl DataProcessor {
         //isim_request__start!(|| id);
         //self.sem.clone().acquire().await.unwrap().forget();
 
-        // Incrememt the id.
+        // Increment the id.
         let id = self.id.fetch_add(1, Ordering::SeqCst);
 
         // Enqueue the transaction with the persistent store.
