@@ -17,7 +17,7 @@ impl DataProcessor {
         let persist = Persist::new();
 
         let ret = Self {
-            // this unblocks requests
+            // Multiplying the number of clients by PERSIST_N unblocks requests
             sem: Arc::new(Semaphore::new(PERSIST_N * N_CLIENTS)),
             // sem: Arc::new(Semaphore::new(PERSIST_N)),
             id: AtomicU64::new(5),
