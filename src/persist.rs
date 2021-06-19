@@ -28,6 +28,6 @@ impl Persist {
             tokio::time::sleep(delta).await;
             isim_persist__done!(|| id);
             handler.await;
-        }); //.await.unwrap(); // we should wait for the store transaction to finish?
+        });
     }
 }

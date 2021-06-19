@@ -5,6 +5,7 @@ use std::sync::{
 use tokio::sync::Semaphore;
 
 use crate::persist::{Persist, PERSIST_N};
+use crate::N_CLIENTS;
 
 pub struct DataProcessor {
     sem: Arc<Semaphore>,
@@ -16,7 +17,9 @@ impl DataProcessor {
         let persist = Persist::new();
 
         let ret = Self {
-            sem: Arc::new(Semaphore::new(PERSIST_N)),
+            // this unblocks requests
+            sem: Arc::new(Semaphore::new(PERSIST_N * N_CLIENTS)),
+            // sem: Arc::new(Semaphore::new(PERSIST_N)),
             id: AtomicU64::new(5),
             persist,
         };
