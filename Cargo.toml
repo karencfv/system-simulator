@@ -13,4 +13,3 @@ futures = "0.3.15"
 
 [features]
 asm = ["usdt/asm"]
-no-linker = ["usdt/no-linker"]

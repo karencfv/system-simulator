@@ -2,26 +2,19 @@
 
 ## Problem statement
 
-The system only completes all requests under extremely light load.
-
 The following observations are taken using a MacBook Air (M1, 2020) with 16GB RAM.
 
-- Requests start getting blocked at 8 clients running in parallel.
+Starting from a single client, after a slight increase in load (8 clients sunning in parallel) the system begins to block requests. As the load increases, the blockage becomes worse until at about 135 clients running in parallel, when all requests are blocked.
 
-- Packet delay variation (or jitter). There is no correlation between the amount of clients and the variance in delay (is there?). Also all requests are going through so you can rule out things like network packet drops due to kernel TCP backlog overflow.
+### Non issues
 
-- Latency variation in persistent storage transactions. Not relevant to the requests being dropped as the data processor does not care if these transactions are successful or not. This variance could potentially cause a bottleneck in the semaphore queue though.
+- Packet delay variation (or jitter). There is no correlation between the amount of clients and the variance in network delay. Also, all requests are going through, so you can rule out things like network packet drops due to kernel TCP backlog overflow.
 
-- All these tests are assumed to be run in an isolated environment, so the issue of noisy neighbours can be ruled out. 
-
-### Solutions based on system requirements
-
-- Care about performance rather that whether all requests complete.
-- Care about whether all requests complete rather than performance.
+- All tests are run in a controlled environment, so the issue of noisy neighbours can be ruled out. 
 
 ### Open questions
 
-- What is the system storing? Are all requests storing elements that are all the same size? Or are they different sizes? If elements are all different sizes then that can account for variance in performance. Check for correlation between network time and persistent storage time
+- What is the system storing? Is the system storing elements that are all the same size? Or are they all different sizes?
 
 ## System diagram
 
@@ -29,11 +22,11 @@ The following observations are taken using a MacBook Air (M1, 2020) with 16GB RA
 
 ## Troubleshooting
 
-Below are the results of all the readings I have taken. As a rule of thumb I normally take 3 samples of data per debugging script, to rule out glitches or a result that looks wildly different for some unrelated reason. In this case there were no major differences each time I ran the scripts, so for brevity's sake I have only included one of the runs per different load amount.
+Below are the results of all the readings I have taken. As a rule of thumb I normally take 3 samples of data per debugging script, to rule out glitches or a result that looks wildly different for some reason. In this case there were no major differences each time I ran the scripts, so for brevity's sake I have only included one of the runs per different load amount.
 
 ### Summary of requests
 
-Here I am running a script which counts the total requests for each of `request-block`, `request-nonblock`, `requests-start`, `request-done`, `persist-started`, and `persist-done` during a minute under different load.
+I ran a script which counts the total requests for each of `request-block`, `request-nonblock`, `requests-start`, `request-done`, `persist-started`, and `persist-done` during a minute under different load.
 
 These are my findings:
 
@@ -117,12 +110,12 @@ CPU     ID                    FUNCTION:NAME
 ```
 </details>
 
-## Request lifetime duration
+## Request lifetime duration per thread
 
-The first tests I was taking request lifetime duration readings for 1 minute under different load. These are my findings:
+I took request lifetime duration readings for 1 minute under different load. These are my findings:
 
-- The average on lighter load is ~6608681 which is higher than the average on medium (15 clients and ~3991609ns), high (125 clients and ~4760868ns), and max (1000 clients and ~3384652ns).
-- It is interesting how when running 1000 clients at the same time, the total of requests processed goes down to ~3800 from ~4666 when I was running 125 clients (at 125 clients about 25% of requests are not being blocked).
+- When running 1000 clients in parallel, the total of requests processed goes down to ~3800 from ~4666, which is the result of running 125 clients (at 125 clients about 25% of requests are not being blocked).
+- The average on lighter load is ~6608681ns which is higher than the average on medium (15 clients and ~3991609ns), high (125 clients and ~4760868ns), and max (1000 clients and ~3384652ns).
 
 Results of running the [request lifetime](./scripts/request-lifetime.sh) DTrace script on different loads:
 <details>
@@ -238,15 +231,15 @@ Summary of all request lifetimes taken in one minute represented in nanoseconds:
 
 </details>
 
-## Writing to persistent storage duration
-
-Even though the data processor doesn't wait for the persistent storage actions to complete, it is important to see how they behave under different load to determine how they correlate to the request blockage problem.
+## Writing to persistent storage duration per thread
 
 I took persistent store transaction duration readings for 1 minute under different load. These are my findings:
 
-- It seems that during medium load when several requests are blocked (50% - 75%), the persistent store transactions take less time to complete.
+- Once all requests are blocked, the total number of write transactions decreases. ~5904 when running 135 clients in parallel, and ~4282 when running 1000 clients.
 
 - Under high load after most requests start being blocked, the latency increases slightly and plateaus.
+
+- It seems that during medium load when several requests are blocked (50% - 75%), the persistent store transactions take less time to complete (this may be due to the random number generator for the range).
 
 Results of running the [persistent store transactions](./scripts/persist-time.sh) DTrace script on different loads:
 
@@ -464,9 +457,11 @@ TIMESTAMP  PID    %CPU    PROCESS
 ```
 </details>
 
-## Request blockage issue
+## Solution
 
-A bottleneck was being created due to the data processor semaphore permits not scaling with the amount of requests changed. I took the amount of permits that worked for a single client and multiplied that by the number of clients.
+Initially, I believed the best way forward would be to modify the `request()` function to wait for the persistent store transaction to complete. I then realised that this modification would only make the system slower and the semaphore was regulating writes anyway.
+
+I noticed a bottleneck was being created, due to the data processor semaphore permits not scaling with the amount of requests changed. I took the amount of permits that worked for a single client, and multiplied that by the number of clients.
 
 ```rust
 sem: Arc::new(Semaphore::new(PERSIST_N)),
@@ -556,7 +551,7 @@ CPU     ID                    FUNCTION:NAME
 
 #### Request lifetime duration on a single thread
 
-While variance has been reduced significantly, the trend is still to have the request lifetime reduced the higher the load. ~6541583ns average request lifetime when running a single client, ~2215251ns average request lifetime when running 135 clients, and ~852957ns when running 1000 clients.
+Variance has been reduced significantly. The trend is still to have the request lifetime reduced the higher the load. ~6541583ns average request lifetime when running a single client, ~2215251ns average request lifetime when running 135 clients, and ~852957ns when running 1000 clients (this last part is probably due to the random number generator).
 
 <details>
 
@@ -777,7 +772,7 @@ Summary of all writes to persistent storage taken in one minute represented in n
 
 #### CPU usage
 
-These percentages have been drastically reduced. At the highest load (1000 clients) we were previously at around 45% CPU usage. With the semaphore adjustment the percentage has been reduced to about ~5% on average.
+These percentages have been drastically reduced. At the highest load (1000 clients) we were previously at ~45% CPU usage. With the semaphore adjustment the percentage has been reduced to ~5% on average.
 
 <details>
 
@@ -839,30 +834,6 @@ TIMESTAMP  PID    %CPU    PROCESS
 
 ## Reducing variance even further
 
-Although the change in semaphore permits has drastically reduced variance in performance, one can go even further to reduce the current range of time it takes to store each of the elements. This can be done by implementing multipart uploads with a queue mechanism.
-
-While implementing the above falls out of the scope of this exercise, I can simulate it by changing:
-
-```rust
-impl Persist {
-    pub fn new() -> Self {
-        Self {
-            rng: Normal::new(10_000.0, 5_000.0).unwrap(),
-        }
-    }
-```
-
-to
-
-```rust
-impl Persist {
-    pub fn new() -> Self {
-        Self {
-            rng: Normal::new(10_000.0, 100.0).unwrap(),
-        }
-    }
-```
-
-__TODO: Add measurements of this change__
+Although the change in semaphore permits has drastically reduced variance in performance, one can go even further to reduce the current range of time it takes to store each of the elements. This can be done by implementing multipart uploads with a queue mechanism. (Implementing a queue mechanism and a multipart upload functionality would take a significant amount of time. I believe this falls out of the scope of the exercise?)
 
 The current range for network delay is quite narrow, so for this system I don't think it's necessary to make any network changes.

@@ -18,7 +18,7 @@ mod persist;
 // 15 causes very little blocking behavior (in the steady state)
 // 125 causes some blocking behavior and some non-blocking
 // 135: essentially all requests incur blocking
-static N_CLIENTS: usize = 1000;
+static N_CLIENTS: usize = 15;
 
 #[tokio::main]
 async fn main() {

@@ -17,7 +17,9 @@ impl DataProcessor {
         let persist = Persist::new();
 
         let ret = Self {
-            // Multiplying the number of clients by PERSIST_N unblocks requests
+            // Multiplying the number of clients by PERSIST_N unblocks requests.
+            // To run system simulator with blocking bug, uncomment line 24 and
+            // comment out line 23.
             sem: Arc::new(Semaphore::new(PERSIST_N * N_CLIENTS)),
             // sem: Arc::new(Semaphore::new(PERSIST_N)),
             id: AtomicU64::new(5),
