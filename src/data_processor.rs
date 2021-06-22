@@ -29,13 +29,14 @@ impl DataProcessor {
         ret
     }
     pub async fn request(&self, id: u64) {
-        // Pause for a moment to give other tasks an opportunity to advance.
-        //sleep(Duration::from_micros(100)).await;
-
         // Wait until we can be sure we have a slot available in the persistent
-        // store i.e. that the enqueue will succeed. We eliminate the reservation
-        // and restore it when the transaction is complete.
+        // store i.e. that the enqueue will succeed. We eliminate the
+        // reservation and restore it when the transaction is complete.
         let sem = self.sem.clone();
+
+        // We first try to acquire the semaphore in a non-blocking fashion
+        // simply so that we can determine whether this is a blocking or
+        // non-blocking request for the semaphore.
         match sem.try_acquire() {
             Ok(s) => {
                 isim_request__nonblock!(|| id);
@@ -48,10 +49,7 @@ impl DataProcessor {
         }
         .forget();
 
-        //isim_request__start!(|| id);
-        //self.sem.clone().acquire().await.unwrap().forget();
-
-        // Increment the id.
+        // Incrememt the id.
         let id = self.id.fetch_add(1, Ordering::SeqCst);
 
         // Enqueue the transaction with the persistent store.
@@ -60,6 +58,7 @@ impl DataProcessor {
             sem.add_permits(1);
         });
 
-        // Return to the caller without waiting for the transaction to complete.
+        // Return to the caller without waiting for the transaction to
+        // complete.
     }
 }
