@@ -4,8 +4,9 @@ use std::sync::{
 };
 use tokio::sync::Semaphore;
 
+use std::collections::VecDeque;
+
 use crate::persist::{Persist, PERSIST_N};
-use crate::N_CLIENTS;
 
 pub struct DataProcessor {
     sem: Arc<Semaphore>,
@@ -17,11 +18,7 @@ impl DataProcessor {
         let persist = Persist::new();
 
         let ret = Self {
-            // Multiplying the number of clients by PERSIST_N unblocks requests.
-            // To run system simulator with blocking bug, uncomment line 24 and
-            // comment out line 23.
-            sem: Arc::new(Semaphore::new(PERSIST_N * N_CLIENTS)),
-            // sem: Arc::new(Semaphore::new(PERSIST_N)),
+            sem: Arc::new(Semaphore::new(PERSIST_N)),
             id: AtomicU64::new(5),
             persist,
         };
@@ -33,6 +30,10 @@ impl DataProcessor {
         // store i.e. that the enqueue will succeed. We eliminate the
         // reservation and restore it when the transaction is complete.
         let sem = self.sem.clone();
+
+        // change to use tokio mspc
+        // let mut buf = VecDeque::new();
+        // buf.push_back(id);
 
         // We first try to acquire the semaphore in a non-blocking fashion
         // simply so that we can determine whether this is a blocking or
@@ -49,7 +50,7 @@ impl DataProcessor {
         }
         .forget();
 
-        // Incrememt the id.
+        // Increment the id.
         let id = self.id.fetch_add(1, Ordering::SeqCst);
 
         // Enqueue the transaction with the persistent store.
