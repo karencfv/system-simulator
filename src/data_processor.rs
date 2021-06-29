@@ -4,8 +4,6 @@ use std::sync::{
 };
 use tokio::sync::Semaphore;
 
-use std::collections::VecDeque;
-
 use crate::persist::{Persist, PERSIST_N};
 
 pub struct DataProcessor {
