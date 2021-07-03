@@ -29,10 +29,6 @@ impl DataProcessor {
         // reservation and restore it when the transaction is complete.
         let sem = self.sem.clone();
 
-        // change to use tokio mspc
-        // let mut buf = VecDeque::new();
-        // buf.push_back(id);
-
         // We first try to acquire the semaphore in a non-blocking fashion
         // simply so that we can determine whether this is a blocking or
         // non-blocking request for the semaphore.

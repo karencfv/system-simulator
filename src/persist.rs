@@ -33,7 +33,6 @@ impl Persist {
         // Asynchronously delay for the time required to complete a transaction
         // and then call the completion handler.
         tokio::task::spawn(async move {
-            isim_persist__async__start!(|| id);
             tokio::time::sleep(delta).await;
             isim_persist__done!(|| id);
             sem.add_permits(1);

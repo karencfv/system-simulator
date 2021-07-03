@@ -837,3 +837,290 @@ TIMESTAMP  PID    %CPU    PROCESS
 Although the change in semaphore permits has drastically reduced variance in performance, one can go even further to reduce the current range of time it takes to store each of the elements. This can be done by implementing multipart uploads with a queue mechanism. (Implementing a queue mechanism and a multipart upload functionality would take a significant amount of time. I believe this falls out of the scope of the exercise?)
 
 The current range for network delay is quite narrow, so for this system I don't think it's necessary to make any network changes.
+
+## Update 29/June/2021
+
+There are several inconsistencies between the data collected with the DTrace scripts and the expected result.
+
+The total request lifetime readings are incorrect. There are several outliers and inconsistent data.
+
+Why are the persistent store latency readings decreasing with more clients? This doesn't make much sense and should not be happening.
+
+### Approaches I tried
+- Decrease the range between in latency of the random number generator for the persistent store made no difference in readings for request lifetimes or persistent store.
+- Setting the sleep time in the persistent store thread as a defined number (`50_000` microseconds) instead of a randomly generated one, still resulted in varying latency (i.e. no change):
+
+    ```console
+    Summary of all writes to persistent storage taken in one minute represented in nanoseconds:
+      total writes                                                   1976
+      average write                                              65804674
+      max write                                               17229761375
+      min write                                                     24792
+      visualisation of writes                           
+               value  ------------- Distribution ------------- count    
+                8192 |                                         0        
+               16384 |                                         4        
+               32768 |                                         7        
+               65536 |                                         2        
+              131072 |                                         5        
+              262144 |                                         0        
+              524288 |                                         2        
+             1048576 |                                         8        
+             2097152 |                                         0        
+             4194304 |                                         0        
+             8388608 |                                         0        
+            16777216 |                                         0        
+            33554432 |@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@   1878     
+            67108864 |@                                        39       
+           134217728 |                                         22       
+           268435456 |                                         7        
+           536870912 |                                         0        
+          1073741824 |                                         0        
+          2147483648 |                                         1        
+          4294967296 |                                         0        
+          8589934592 |                                         0        
+         17179869184 |                                         1        
+         34359738368 |                                         0 
+    ```
+
+- I created a [flowchart](./scripts/diagram-req.sh) to follow the thread beginning with request-start and it does not recognise persist-done. I was under the impression this should show children threads? Is this is because it's in green threads instead of OS threads?
+
+    ```console
+    CPU FUNCTION                                 
+      5 | _ZN16system_simulator7persist7Persist7enqueue17h319475d7781f757dE:persist-start           3918458
+      5 | _ZN16system_simulator7persist7Persist7enqueue17h319475d7781f757dE:persist-start           3946458
+      5 | _ZN16system_simulator7persist7Persist7enqueue17h319475d7781f757dE:persist-start           3952083
+      5 | _ZN16system_simulator7persist7Persist7enqueue17h319475d7781f757dE:persist-start           3957375
+      5 | _ZN16system_simulator7persist7Persist7enqueue17h319475d7781f757dE:persist-start           3962208
+      5 | _ZN16system_simulator7persist7Persist7enqueue17h319475d7781f757dE:persist-start           3969958
+      5 | _ZN16system_simulator7persist7Persist7enqueue17h319475d7781f757dE:persist-start           3974666
+      5 | _ZN16system_simulator7persist7Persist7enqueue17h319475d7781f757dE:persist-start           3979541
+      5 | _ZN16system_simulator6client6Client2go28_$u7b$$u7b$closure$u7d$$u7d$17hacec9e85df845263E:request-done           6600791
+    ```
+
+- I created a [flowchart](./scripts/persist-thread-diagram-req.sh) inside the tokio task for persistent store. The times are _somewhat_ consistent, if I put the sleep duration to a set number and set the sleep time to `50_000` microseconds.
+
+    ```console
+    CPU FUNCTION                                 
+    <...>
+    0 | _ZN16system_simulator7persist7Persist7enqueue28_$u7b$$u7b$closure$u7d$$u7d$17hbdc2fccf7323be45E:persist-done          51556125
+    2 | _ZN16system_simulator7persist7Persist7enqueue28_$u7b$$u7b$closure$u7d$$u7d$17hbdc2fccf7323be45E:persist-done          51027833
+    1 | _ZN16system_simulator7persist7Persist7enqueue28_$u7b$$u7b$closure$u7d$$u7d$17hbdc2fccf7323be45E:persist-done         159038209
+    3 | _ZN16system_simulator7persist7Persist7enqueue28_$u7b$$u7b$closure$u7d$$u7d$17hbdc2fccf7323be45E:persist-done          56293750
+    3 | _ZN16system_simulator7persist7Persist7enqueue28_$u7b$$u7b$closure$u7d$$u7d$17hbdc2fccf7323be45E:persist-done          55701250
+    1 | _ZN16system_simulator7persist7Persist7enqueue28_$u7b$$u7b$closure$u7d$$u7d$17hbdc2fccf7323be45E:persist-done          53783458
+    3 | _ZN16system_simulator7persist7Persist7enqueue28_$u7b$$u7b$closure$u7d$$u7d$17hbdc2fccf7323be45E:persist-done          54327709
+    2 | _ZN16system_simulator7persist7Persist7enqueue28_$u7b$$u7b$closure$u7d$$u7d$17hbdc2fccf7323be45E:persist-done          54395750
+    0 | _ZN16system_simulator7persist7Persist7enqueue28_$u7b$$u7b$closure$u7d$$u7d$17hbdc2fccf7323be45E:persist-done          52258416
+    3 | _ZN16system_simulator7persist7Persist7enqueue28_$u7b$$u7b$closure$u7d$$u7d$17hbdc2fccf7323be45E:persist-done          51845375
+    2 | _ZN16system_simulator7persist7Persist7enqueue28_$u7b$$u7b$closure$u7d$$u7d$17hbdc2fccf7323be45E:persist-done             25917
+    <...>
+    ```
+
+### Conclusions so far
+
+I'm guessing total request lifetime records are wrong because my scripts ignore the `persist-done` probe, which means they are not taking into account the green threads. How does one go on about following child green threads in DTrace?
+
+Once I have an answer to the above, I will have more of an idea on how to fix the persistent store script.
+
+## Update 3/Jul/2021
+
+After talking with Adam, I learned that due to the way DTrace and green threads work together, the correct way to capture information about concurrent code that uses green threads is to follow the ID that correlates probes rather than the thread ID.
+
+I made the following changes to the DTrace scripts:
+
+```shell
+self->follow
+```
+
+to
+
+```shell
+follow[arg0]
+```
+
+The collected data makes sense now as shown below. All of these readings have been taken when the system is still blocking requests.
+
+#### Request lifetime duration
+
+As you can see, the total requests now matches the [information collected](#summary-of-requests) when using the [request count](./scripts/count.sh) script.
+
+<details>
+
+#### Running a single client:
+
+```console
+Summary of all request lifetimes taken in one minute represented in nanoseconds:
+  total requests                                                   60
+  average request lifetime                                    6763041
+  max request lifetime                                        8521459
+  min request lifetime                                        5262250
+  request lifetimes visualisation                   
+           value  ------------- Distribution ------------- count    
+         2097152 |                                         0        
+         4194304 |@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@  59       
+         8388608 |@                                        1        
+        16777216 |                                         0        
+```
+
+#### Under light load (15 clients):
+
+```console
+Summary of all request lifetimes taken in one minute represented in nanoseconds:
+  total requests                                                  885
+  average request lifetime                                    7231868
+  max request lifetime                                       19259875
+  min request lifetime                                        4159333
+  request lifetimes visualisation                   
+           value  ------------- Distribution ------------- count    
+         1048576 |                                         0        
+         2097152 |                                         2        
+         4194304 |@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@         712      
+         8388608 |@@@@@@@@                                 168      
+        16777216 |                                         3        
+        33554432 |                                         0 
+```
+
+#### Under medium load (125 clients):
+
+```console
+Summary of all request lifetimes taken in one minute represented in nanoseconds:
+  total requests                                                 7418
+  average request lifetime                                    8761273
+  max request lifetime                                       37544667
+  min request lifetime                                        3539958
+  request lifetimes visualisation                   
+           value  ------------- Distribution ------------- count    
+         1048576 |                                         0        
+         2097152 |                                         9        
+         4194304 |@@@@@@@@@@@@@@@@@@@@@@@@@@               4896     
+         8388608 |@@@@@@@@@@@                              2085     
+        16777216 |@@                                       426      
+        33554432 |                                         2        
+        67108864 |                                         0
+```
+
+#### Under medium/high load (135 clients):
+
+```console
+Summary of all request lifetimes taken in one minute represented in nanoseconds:
+  total requests                                                 7419
+  average request lifetime                                    8595895
+  max request lifetime                                       35859583
+  min request lifetime                                        3717500
+  request lifetimes visualisation                   
+           value  ------------- Distribution ------------- count    
+         1048576 |                                         0        
+         2097152 |                                         3        
+         4194304 |@@@@@@@@@@@@@@@@@@@@@@@@@@@              4965     
+         8388608 |@@@@@@@@@@@                              2085     
+        16777216 |@@                                       365      
+        33554432 |                                         1        
+        67108864 |                                         0 
+```
+
+#### Under high load (1000 clients):
+
+```console
+Summary of all request lifetimes taken in one minute represented in nanoseconds:
+  total requests                                                 6807
+  average request lifetime                                 6813586360
+  max request lifetime                                     6895553917
+  min request lifetime                                     6746383958
+  request lifetimes visualisation                   
+           value  ------------- Distribution ------------- count    
+      2147483648 |                                         0        
+      4294967296 |@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ 6807     
+      8589934592 |                                         0 
+```
+
+</details>
+
+#### Writing to persistent storage duration
+
+Given the new approach to correlate probes, the `persist-async-start` probe is no longer necessary. The `persist-start` probe can be used instead.
+
+<details>
+
+#### Running a single client:
+
+```console
+Summary of all writes to persistent storage taken in one minute represented in nanoseconds:
+  total writes                                                     60
+  average write                                              64737102
+  max write                                                  78047417
+  min write                                                  52074250
+  visualisation of writes                           
+           value  ------------- Distribution ------------- count    
+        16777216 |                                         0        
+        33554432 |@@@@@@@@@@@@@@@@@@@@@@@@@@@              40       
+        67108864 |@@@@@@@@@@@@@                            20       
+       134217728 |                                         0   
+```
+
+#### Under light load (15 clients):
+
+```console
+Summary of all writes to persistent storage taken in one minute represented in nanoseconds:
+  total writes                                                    885
+  average write                                              61787007
+  max write                                                  81290167
+  min write                                                  51105667
+  visualisation of writes                           
+           value  ------------- Distribution ------------- count    
+        16777216 |                                         0        
+        33554432 |@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@      773      
+        67108864 |@@@@@                                    112      
+       134217728 |                                         0 
+```
+
+#### Under medium load (125 clients):
+
+```console
+Summary of all writes to persistent storage taken in one minute represented in nanoseconds:
+  total writes                                                   7413
+  average write                                              61725998
+  max write                                                  79233667
+  min write                                                  50252000
+  visualisation of writes                           
+           value  ------------- Distribution ------------- count    
+        16777216 |                                         0        
+        33554432 |@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@       6354     
+        67108864 |@@@@@@                                   1059     
+       134217728 |                                         0 
+```
+
+#### Under medium/high load (135 clients):
+
+```console
+Summary of all writes to persistent storage taken in one minute represented in nanoseconds:
+  total writes                                                   7415
+  average write                                              61674627
+  max write                                                  80700583
+  min write                                                  50174500
+  visualisation of writes                           
+           value  ------------- Distribution ------------- count    
+        16777216 |                                         0        
+        33554432 |@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@       6374     
+        67108864 |@@@@@@                                   1041     
+       134217728 |                                         0
+```
+
+#### Under high load (1000 clients):
+
+```console
+Summary of all writes to persistent storage taken in one minute represented in nanoseconds:
+  total writes                                                   7649
+  average write                                              61687820
+  max write                                                  92532375
+  min write                                                  50188375
+  visualisation of writes                           
+           value  ------------- Distribution ------------- count    
+        16777216 |                                         0        
+        33554432 |@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@      6610     
+        67108864 |@@@@@                                    1039     
+       134217728 |                                         0  
+```
+</details>
+
+Success!

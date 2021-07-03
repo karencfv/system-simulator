@@ -4,20 +4,20 @@
 
 isim*:::request-start
 {
-	self->follow = timestamp;;
+	follow[arg0] = timestamp;
 }
 
 isim*:::persist-start,
 isim*:::persist-done
-/self->follow/
+/follow[arg0]/
 {
-    trace(timestamp - self->follow);
+    trace(timestamp - follow[arg0]);
 }
 
 isim*:::request-done
-/self->follow/
+/follow[arg0]/
 {
-    trace(timestamp - self->follow);
-    self->follow = 0;
+    trace(timestamp - follow[arg0]);
+    follow[arg0] = 0;
     exit(0);
 }
