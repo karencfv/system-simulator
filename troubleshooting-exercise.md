@@ -1124,3 +1124,293 @@ Summary of all writes to persistent storage taken in one minute represented in n
 </details>
 
 Success!
+
+## Update 11/Jul/2021
+
+Moar histograms!
+
+There seem to be a few "outliers", but in this case I do believe it is because of the random number generators? Happy to be proven wrong though :D
+
+#### Request lifetime duration
+
+In the previous examples most requests fell into one or two buckets of time values. To go further with granularity and get a clearer picture, `lquantize` can be used instead of `quantize`.
+
+This information was collected using the [linear quantize](./scripts/linear-q-request-lifetime.sh) script for request lifetimes.
+
+<details>
+
+#### Running a single client:
+
+```console
+  Request lifetimes over time in microseconds       
+           value  ------------- Distribution ------------- count    
+               0 |                                         0        
+              50 |@                                        2        
+             100 |@@@@@@@@@@@@@@@@@@                       26       
+             150 |@@@@@@@@@@@@@@@                          22       
+             200 |@                                        2        
+             250 |                                         0        
+             300 |                                         0        
+             350 |                                         0        
+             400 |                                         0        
+             450 |@@@                                      5        
+             500 |@                                        2        
+             550 |                                         0 
+```
+
+#### Under light load (15 clients):
+
+```console
+  Request lifetimes over time in microseconds       
+           value  ------------- Distribution ------------- count    
+               0 |                                         0        
+             100 |                                         3        
+             200 |@                                        12       
+             300 |@                                        29       
+             400 |@@@@                                     97       
+             500 |@@@                                      68       
+             600 |@@@                                      73       
+             700 |@@@@                                     82       
+             800 |@@@@@@@@@@@@@@                           302      
+             900 |@@@@@@                                   122      
+            1000 |@@                                       48       
+            1100 |@                                        21       
+            1200 |@                                        17       
+            1300 |                                         7        
+            1400 |                                         4        
+            1500 |                                         0
+```
+
+#### Under medium load (125 clients):
+
+```console
+  Request lifetimes over time in microseconds       
+           value  ------------- Distribution ------------- count    
+             < 0 |                                         0        
+               0 |@@@                                      547      
+             500 |@@@@@@@@@@@@@@@@@@                       3296     
+            1000 |@@@@@@@@@@@                              2006     
+            1500 |@@@@@                                    926      
+            2000 |@@                                       429      
+            2500 |@                                        160      
+            3000 |                                         45       
+            3500 |                                         14       
+            4000 |                                         2        
+            4500 |                                         0
+```
+
+#### Under medium/high load (135 clients):
+
+```console
+  Request lifetimes over time in microseconds       
+           value  ------------- Distribution ------------- count    
+             < 0 |                                         0        
+               0 |                                         1        
+            1000 |                                         14       
+            2000 |                                         48       
+            3000 |@                                        113      
+            4000 |@@                                       386      
+            5000 |@@@@@                                    1017     
+            6000 |@@@@@@@@                                 1520     
+            7000 |@@@@@@@@                                 1518     
+            8000 |@@@@@@@                                  1353     
+            9000 |@@@@@                                    888      
+           10000 |@@@                                      484      
+           11000 |@                                        214      
+           12000 |@                                        108      
+           13000 |                                         44       
+           14000 |                                         16       
+           15000 |                                         2        
+           16000 |                                         0 
+```
+
+#### Under high load (1000 clients):
+
+```console
+  Request lifetimes over time in microseconds       
+           value  ------------- Distribution ------------- count    
+         2950000 |                                         0        
+         3000000 |@                                        120      
+         3050000 |@@                                       294      
+         3100000 |@@@@                                     731      
+         3150000 |@@@@@@@@@@@@                             1966     
+         3200000 |@@                                       330      
+         3250000 |@@@@                                     666      
+         3300000 |@                                        140      
+         3350000 |@@@@                                     638      
+         3400000 |@@@@@@@@                                 1400     
+         3450000 |@@@                                      534      
+         3500000 |                                         0
+```
+
+</details>
+
+#### Blocked vs non blocked requests
+
+The following histograms show the differences in times for blocked and non-blocked requests under different amount of load.
+
+This information was collected using the [blocked](./scripts/linear-q-blocked.sh) and [non-blocked](./scripts/linear-q-non-blocked.sh) linear quantize scripts for request lifetimes.
+
+I was only able to collect the data from the time the `isim*:::request-nonblock` and `isim*:::request-block` probes were fired. My initial intention was to take the entire request time and then filter out by blocked and non-blocked, but was unable to do so 🤔. I'll keep thinking about this one.
+
+<details>
+
+#### Running a single client:
+
+```console
+  Request lifetimes for non blocked requests from the time they are queued in microseconds
+           value  ------------- Distribution ------------- count    
+             < 0 |                                         0        
+               0 |@                                        1        
+              50 |@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@         47       
+             100 |@@@@@                                    7        
+             150 |                                         0        
+             200 |@                                        1        
+             250 |@                                        1        
+             300 |                                         0        
+             350 |                                         0        
+             400 |@                                        2        
+             450 |                                         0 
+```
+
+#### Under light load (15 clients):
+
+```console
+  Request lifetimes for non blocked requests from the time they are queued in microseconds
+           value  ------------- Distribution ------------- count    
+             < 0 |                                         0        
+               0 |@                                        24       
+             100 |@@@@@@@@@@@                              196      
+             200 |@@@@@@@@@@@@@@                           257      
+             300 |@@@@@@                                   110      
+             400 |@                                        15       
+             500 |@@                                       43       
+             600 |@@@@                                     65       
+             700 |@                                        13       
+             800 |                                         1        
+             900 |                                         0 
+
+  Request lifetimes for blocked requests from the time they are blocked in microseconds
+           value  ------------- Distribution ------------- count    
+               0 |                                         0        
+             100 |@@                                       12       
+             200 |@@@@                                     23       
+             300 |@@@@@                                    29       
+             400 |@@@@                                     24       
+             500 |@@@@@                                    28       
+             600 |@@@@@                                    27       
+             700 |@@@@                                     20       
+             800 |@@                                       13       
+             900 |@@                                       13       
+            1000 |@@                                       11       
+            1100 |@@                                       9        
+            1200 |@                                        5        
+            1300 |                                         0 
+```
+
+#### Under medium load (125 clients):
+
+```console
+  Request lifetimes for non blocked requests from the time they are queued in microseconds
+           value  ------------- Distribution ------------- count    
+             < 0 |                                         0        
+               0 |                                         2        
+             100 |                                         26       
+             200 |@@@                                      315      
+             300 |@@@                                      344      
+             400 |@@@@@@@@@@@@@@@@@@@                      2176     
+             500 |@@@                                      393      
+             600 |@                                        103      
+             700 |@                                        132      
+             800 |@@@@@@                                   739      
+             900 |@                                        156      
+            1000 |                                         5        
+            1100 |                                         47       
+            1200 |@                                        101      
+            1300 |                                         9        
+            1400 |                                         1        
+            1500 |                                         4        
+            1600 |                                         0
+
+  Request lifetimes for blocked requests from the time they are blocked in microseconds
+           value  ------------- Distribution ------------- count    
+               0 |                                         0        
+             200 |                                         6        
+             400 |                                         15       
+             600 |                                         20       
+             800 |@@@@@@@@@@@@                             796      
+            1000 |@                                        61       
+            1200 |@@@@@@@@@@@                              791      
+            1400 |@                                        71       
+            1600 |@@@@@@@                                  497      
+            1800 |@                                        66       
+            2000 |@@@@                                     255      
+            2200 |                                         32       
+            2400 |@                                        86       
+            2600 |                                         22       
+            2800 |                                         23       
+            3000 |                                         10       
+            3200 |                                         7        
+            3400 |                                         1        
+            3600 |                                         1        
+            3800 |                                         0
+```
+
+#### Under medium/high load (135 clients):
+
+```console
+  Request lifetimes for non blocked requests from the time they are queued in microseconds
+           value  ------------- Distribution ------------- count    
+             300 |                                         0        
+             400 |@@@@@@@@@@@@@@@@@@@@                     1        
+             500 |                                         0        
+             600 |                                         0        
+             700 |                                         0        
+             800 |                                         0        
+             900 |@@@@@@@@@@@@@@@@@@@@                     1        
+            1000 |                                         0 
+
+  Request lifetimes for blocked requests from the time they are blocked in microseconds
+           value  ------------- Distribution ------------- count    
+             < 0 |                                         0        
+               0 |                                         2        
+            1000 |                                         55       
+            2000 |@                                        229      
+            3000 |@@                                       459      
+            4000 |@@@@@                                    954      
+            5000 |@@@@@@@@                                 1464     
+            6000 |@@@@@@@@                                 1616     
+            7000 |@@@@@@@                                  1272     
+            8000 |@@@@                                     847      
+            9000 |@@                                       477      
+           10000 |@                                        235      
+           11000 |                                         75       
+           12000 |                                         25       
+           13000 |                                         8        
+           14000 |                                         1        
+           15000 |                                         0
+```
+
+#### Under high load (1000 clients):
+
+```console
+  Request lifetimes for blocked requests from the time they are blocked in microseconds
+           value  ------------- Distribution ------------- count    
+         2750000 |                                         0        
+         2800000 |                                         12       
+         2850000 |@                                        176      
+         2900000 |@                                        213      
+         2950000 |@                                        215      
+         3000000 |@                                        110      
+         3050000 |                                         78       
+         3100000 |@@@                                      559      
+         3150000 |@@@@                                     626      
+         3200000 |@@@@@@                                   1044     
+         3250000 |@@@@@@@@                                 1406     
+         3300000 |@@@                                      491      
+         3350000 |@@@@@                                    806      
+         3400000 |@@@                                      582      
+         3450000 |@@@                                      502      
+         3500000 |                                         0 
+```
+</details>
