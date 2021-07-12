@@ -10,3 +10,6 @@ rand_distr = "0.4.0"
 rand = "0.8.3"
 tokio = { version = "1.6.1", features = ["full"] }
 futures = "0.3.15"
+
+[features]
+asm = ["usdt/asm"]
