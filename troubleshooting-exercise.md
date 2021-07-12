@@ -1414,3 +1414,7 @@ I was only able to collect the data from the time the `isim*:::request-nonblock`
          3500000 |                                         0 
 ```
 </details>
+
+## Update 12/Jul/2021
+
+Was thinking it doesn't make much sense to include the time it takes to traverse the network at the end of the trip, when measuring blocking vs non-blocking requests. I updated the scripts to stop at `isim*:::persist-done` rather than `isim*:::request-done`, but they did not work as the ID is incremented before `persist.enqueue()` is called. Is it necessary that the ID be incremented there specifically?
